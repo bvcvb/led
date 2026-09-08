@@ -18,7 +18,7 @@ import gc
 import requests2
 
 # ---- 配置区 -------------------------------------------------------------
-FETCH_URL = "https://gist.githubusercontent.com/<user>/<gist_id>/raw/key.py"
+FETCH_URL = "https://raw.githubusercontent.com/bvcvb/led/master/key.py"
 POLL_INTERVAL_MS = 5000          # 轮询间隔(毫秒)
 MAX_INLINE_BYTES = 20 * 1024     # 超过此大小不做 inline 提示(仅日志用)
 FETCH_TIMEOUT_MS = 10000         # 单次 GET 超时(毫秒)

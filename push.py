@@ -4,19 +4,24 @@
 push.py — 把本地代码无线下发到 M5Stack CoreS3 (UIFlow2)
 
 原理:
-    把本地文件(默认为 key.py) 的内容写入 GitHub Gist 的某个文件。
-    设备端 device/loader.py 会通过 requests2.get(该 Gist 文件的 raw 地址) 拉取并执行。
+    把本地文件(默认为 key.py) 的内容写入 GitHub 仓库 bvcvb/led 的 key.py (master 分支)。
+    设备端 device/loader.py 会通过 requests2.get(该文件的 raw 地址) 拉取并执行。
 
 前置:
-    1. 一个 GitHub Gist (先在网页上建一个, 记下其 gist_id)。
-    2. 一个 GitHub Personal Access Token, 权限勾选 "gist"。
+    1. 一个 GitHub 仓库 (本脚本默认 bvcvb/led, 可通过环境变量覆盖)。
+    2. 一个 GitHub Personal Access Token (默认 fine-grained PAT),
+       需要有该仓库的 Contents 读写权限。
        通过环境变量 GITHUB_TOKEN 传入。
 
 用法:
-    export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
-    python3 push.py <GIST_ID> [local_file]        # 更新 gist 里的 <basename(local_file)>
-    python3 push.py <GIST_ID>            # 默认更新 key.py
-    GITHUB_TOKEN=xxx python3 push.py <GIST_ID> key.py
+    export GITHUB_TOKEN="github_pat_..."
+    python3 push.py [local_file]    # 推送到 bvcvb/led 的 master/key.py (默认 key.py)
+
+可选环境变量:
+    GH_OWNER   仓库属主 (默认 bvcvb)
+    GH_REPO    仓库名   (默认 led)
+    GH_BRANCH  分支     (默认 master)
+    GH_PATH    仓库内文件路径 (默认 key.py)
 
 返回:
     成功时打印设备端可用的 raw 地址(fetch_url)。
@@ -29,15 +34,67 @@ import base64
 import urllib.request
 import urllib.error
 
-# Gist 文件更新接口
-API = "https://api.github.com/gists/{gist_id}"
-# 默认本地文件
+# 默认目标
+DEFAULT_OWNER = "bvcvb"
+DEFAULT_REPO = "led"
+DEFAULT_BRANCH = "master"
+DEFAULT_PATH = "key.py"
 DEFAULT_FILE = "key.py"
+
+# GitHub API
+API_CONTENTS = "https://api.github.com/repos/{owner}/{repo}/contents/{path}"
 
 
 def die(msg: str, code: int = 1) -> None:
     print(f"[push] 错误: {msg}", file=sys.stderr)
     sys.exit(code)
+
+
+def api_request(req: urllib.request.Request, token: str, data: bytes = None) -> dict:
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, data=data, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        die(f"HTTP {e.code}: {body}")
+    except urllib.error.URLError as e:
+        die(f"网络错误: {e.reason}")
+
+
+def get_sha(owner, repo, path, branch, token):
+    """取仓库里该文件当前 sha, 不存在返回 None。"""
+    import urllib.parse
+    url = API_CONTENTS.format(owner=owner, repo=repo,
+                              path=urllib.parse.quote(path, safe="/"))
+    url += f"?ref={branch}"
+    req = urllib.request.Request(url, method="GET")
+    try:
+        data = api_request(req, token)
+        return data.get("sha")
+    except SystemExit:
+        # 404 = 文件不存在, 允许创建
+        return None
+
+
+def push(owner, repo, path, branch, content, token):
+    """把 content 写入仓库的 path 文件 (指定分支), 自动创建或更新。"""
+    import urllib.parse
+    url = API_CONTENTS.format(owner=owner, repo=repo,
+                              path=urllib.parse.quote(path, safe="/"))
+    sha = get_sha(owner, repo, path, branch, token)
+    payload = {
+        "message": f"update {path}",
+        "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+        "branch": branch,
+    }
+    if sha:
+        payload["sha"] = sha
+    req = urllib.request.Request(url, method="PUT")
+    return api_request(req, token, data=json.dumps(payload).encode("utf-8"))
 
 
 def read_local(path: str) -> str:
@@ -47,52 +104,24 @@ def read_local(path: str) -> str:
         return f.read()
 
 
-def push(gist_id: str, content: str, filename: str, token: str) -> dict:
-    """用 GitHub API 把 content 写入 gist 的 filename 文件。"""
-    url = API.format(gist_id=gist_id)
-    payload = {"files": {filename: {"content": content}}}
-    req = urllib.request.Request(url, method="PATCH")
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Accept", "application/vnd.github+json")
-    req.add_header("Content-Type", "application/json")
-    data = json.dumps(payload).encode("utf-8")
-
-    try:
-        with urllib.request.urlopen(req, data=data, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")
-        die(f"HTTP {e.code}: {body}")
-    except urllib.error.URLError as e:
-        die(f"网络错误: {e.reason} ({url})")
-
-
 def main() -> None:
-    args = sys.argv[1:]
-    if not args:
-        die("用法: python3 push.py <GIST_ID> [local_file]")
-    gist_id = args[0]
-    local_file = args[1] if len(args) > 1 else DEFAULT_FILE
+    local_file = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_FILE
+
+    owner = os.environ.get("GH_OWNER", DEFAULT_OWNER)
+    repo = os.environ.get("GH_REPO", DEFAULT_REPO)
+    branch = os.environ.get("GH_BRANCH", DEFAULT_BRANCH)
+    path = os.environ.get("GH_PATH", DEFAULT_PATH)
 
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     if not token:
-        die("缺少 GITHUB_TOKEN 环境变量 (需 gist 权限)。")
+        die("缺少 GITHUB_TOKEN 环境变量 (需该仓库 Contents 读写权限)。")
 
-    filename = os.path.basename(local_file)
     content = read_local(local_file)
-    result = push(gist_id, content, filename, token)
+    push(owner, repo, path, branch, content, token)
 
-    # 从返回中找到该文件的 raw 地址
-    files = result.get("files", {})
-    entry = files.get(filename)
-    raw_url = (entry or {}).get("raw_url")
-
-    print(f"[push] 已更新 gist 文件: {filename}")
-    print(f"[push] gist_url: {result.get('html_url', '')}")
-    if raw_url:
-        print(f"[push] fetch_url (设备端 loader 用这个):\n       {raw_url}")
-    else:
-        print("[push] 警告: 未取到 raw_url, 请从 gist 网页手动复制 raw 地址。")
+    raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}"
+    print(f"[push] 已更新 {owner}/{repo}/{branch}/{path} ({len(content)} bytes)")
+    print(f"[push] fetch_url (设备端 loader 用这个):\n       {raw_url}")
 
 
 if __name__ == "__main__":
