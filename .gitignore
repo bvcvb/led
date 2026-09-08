@@ -1,0 +1,10 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 敏感凭证（切勿提交）
+*.token
+.env
+gh_token
+*.key
