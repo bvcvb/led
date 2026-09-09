@@ -1,16 +1,20 @@
 import M5
 from M5 import *
 from module import FacesKeyboard3Module
-import machine
 
 
 # 应用版本号 —— 显示在屏幕上, 便于核对设备运行的是哪个版本
-APP_VERSION = "v1.1.0"           # 新增 menu.py 应用选择器; 键盘测试作为可运行应用
-# 触控重启按钮的屏幕区域(横屏 CoreS3 320x240; 放右上角)
-RESTART_BTN_X = 250              # 按钮区域左边界
-RESTART_BTN_Y = 6                # 按钮区域上边界
-RESTART_BTN_W = 66               # 按钮区域宽
-RESTART_BTN_H = 40               # 按钮区域高
+APP_VERSION = "v1.2.0"           # UI 基础优化: 分区布局 + 状态彩色高亮
+# UI 颜色
+BANNER_BG = 0x000080            # 顶部标题栏背景(深蓝)
+BANNER_FG = 0xFFFFFF            # 标题栏文字
+MAIN_BG = 0x1E1E1E              # 主内容区背景(浅灰)
+HINT_BG = 0x003366              # 底部提示栏背景
+MODE_NORM_FG = 0x00FF00         # NORMAL 文字(绿)
+MODE_DIRECT_FG = 0xFFA500       # DIRECT 文字(橙)
+TXT_FG = 0xFFFFFF
+LINE_FG = 0xFFFF00
+VER_FG = 0x808080               # 版本号(灰, 低调)
 
 
 kb = None
@@ -85,6 +89,11 @@ def switch_mode():
         kb.set_mode(FacesKeyboard3Module.DIRECT)
         mode = "DIRECT"
         lbl_mode.setText("MODE: DIRECT (matrix)")
+        # 用 setColor 改文字颜色(固件 Label 支持的确定方法)
+        try:
+            lbl_mode.setColor(MODE_DIRECT_FG)
+        except BaseException:
+            pass
         lbl_key.setText("KEYS: --")
         lbl_line.setText("(press keys, see raw names)")
         safe_set_led(False, False)
@@ -93,6 +102,10 @@ def switch_mode():
         kb.set_mode(FacesKeyboard3Module.NORMAL)
         mode = "NORMAL"
         lbl_mode.setText("MODE: NORMAL (char)")
+        try:
+            lbl_mode.setColor(MODE_NORM_FG)
+        except BaseException:
+            pass
         lbl_key.setText("KEY: --")
         lbl_line.setText("(type on the keyboard)")
 
@@ -104,18 +117,8 @@ def handle_touch():
     if not detail[6]:  # wasClicked -> fresh tap only
         return
 
-    x = M5.Touch.getX()
-    y = M5.Touch.getY()
-
-    # 右上角按钮区域 => 重启设备
-    if (RESTART_BTN_X <= x <= RESTART_BTN_X + RESTART_BTN_W
-            and RESTART_BTN_Y <= y <= RESTART_BTN_Y + RESTART_BTN_H):
-        print("[app] restart triggered by touch (x=%d,y=%d)" % (x, y))
-        machine.reset()
-        return
-
-    # 底部触摸 => 切换 NORMAL / DIRECT
-    if y >= 190:
+    # 底部触摸 => 切换 NORMAL / DIRECT (重启已统一到 menu, 这里不再做)
+    if M5.Touch.getY() >= 190:
         switch_mode()
 
 
@@ -123,31 +126,29 @@ def setup():
     global kb, lbl_mode, lbl_key, lbl_line, lbl_version
     M5.begin()
     Widgets.setRotation(1)
-    Widgets.fillScreen(0x222222)
 
-    Widgets.Title("Faces Keyboard3 Test", 3, 0xFFFFFF, 0x0000FF,
-                  Widgets.FONTS.Montserrat18)
+    # --- 分区布局: 顶部标题栏 + 主内容区 + 底部提示栏 ---
+    Widgets.fillScreen(MAIN_BG)
+    # 顶部标题栏(深蓝)
+    M5.Lcd.fillRect(0, 0, 320, 38, BANNER_BG)
+    Widgets.Label("Faces Keyboard3 Test", 8, 8, 1.0,
+                  BANNER_FG, BANNER_BG, Widgets.FONTS.Montserrat18)
+    # 底部提示栏
+    M5.Lcd.fillRect(0, 190, 320, 50, HINT_BG)
+    Widgets.Label("TAP bottom: switch mode (restart in menu)",
+                  3, 208, 1.0, 0xFFFFFF, HINT_BG, Widgets.FONTS.DejaVu18)
 
-    # 版本号: 放左侧, 文本短避免超宽截断
-    lbl_version = Widgets.Label(APP_VERSION, 6, 6, 1.0,
-                                0x00FFFF, 0x222222, Widgets.FONTS.DejaVu18)
+    # 版本号: 左下角, 小号, 低调
+    lbl_version = Widgets.Label(APP_VERSION, 8, 196, 0.8,
+                                VER_FG, HINT_BG, Widgets.FONTS.DejaVu12)
 
-    # 可见的重启按钮: 右上角, 用矩形 + 字母"R"标出
-    M5.Lcd.fillRect(RESTART_BTN_X, RESTART_BTN_Y, RESTART_BTN_W, RESTART_BTN_H,
-                    0xCC0000)
-    M5.Lcd.drawRect(RESTART_BTN_X, RESTART_BTN_Y, RESTART_BTN_W, RESTART_BTN_H,
-                    0xFFFFFF)
-    Widgets.Label("R", RESTART_BTN_X + 26, RESTART_BTN_Y + 10, 1.0,
-                  0xFFFFFF, 0xCC0000, Widgets.FONTS.Montserrat18)
-
-    lbl_mode = Widgets.Label("MODE: NORMAL (char)", 3, 42, 1.0,
-                             0x00FF00, 0x222222, Widgets.FONTS.DejaVu18)
-    lbl_key = Widgets.Label("KEY: --", 3, 78, 1.0,
-                            0xFFFFFF, 0x222222, Widgets.FONTS.DejaVu18)
-    lbl_line = Widgets.Label("(type on the keyboard)", 3, 114, 1.0,
-                             0xFFFF00, 0x222222, Widgets.FONTS.DejaVu18)
-    Widgets.Label("TAP R: restart  |  TAP bottom: switch", 3, 200, 1.0,
-                  0xFFFFFF, 0x0055AA, Widgets.FONTS.DejaVu18)
+    # --- 主内容区 ---
+    lbl_mode = Widgets.Label("MODE: NORMAL (char)", 8, 48, 1.2,
+                             MODE_NORM_FG, MAIN_BG, Widgets.FONTS.DejaVu18)
+    lbl_key = Widgets.Label("KEY: --", 8, 96, 2.0,
+                            TXT_FG, MAIN_BG, Widgets.FONTS.Montserrat18)
+    lbl_line = Widgets.Label("(type on the keyboard)", 8, 140, 1.0,
+                             LINE_FG, MAIN_BG, Widgets.FONTS.DejaVu18)
 
     kb = FacesKeyboard3Module(address=0x08)
     kb.set_callback(on_key)
