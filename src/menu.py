@@ -22,14 +22,29 @@ import requests2
 APPS_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/apps.json"
 BIN_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/"   # 应用 .py 所在目录
 FETCH_TIMEOUT_MS = 10000
+POLL_CHECK_MS = 3000         # 菜单展示期: 周期性拉 apps.json 检查版本(毫秒)
 ROW_Y0 = 80                 # 第一行应用列表的 y
 ROW_STEP = 50               # 每行间距
 # ------------------------------------------------------------------------
 
-apps = []                   # [{name,file}, ...]
+apps = []                   # [{name,file,version}, ...]
 _sel_ns = None
 _sel_ready = False
 _last_apps = None
+_loaded_ver = {}            # file -> 已加载应用的 version(用于判断是否需重新下载)
+_poll_at = 0                # 下次检查版本的时间点(ticks_ms)
+_redraw = False             # 列表内容变化, 需要重绘
+
+
+def _poll_check():
+    """菜单展示期周期性拉 apps.json; 内容变化则重绘列表(显示最新版本)。"""
+    global _poll_at, _redraw
+    now = time.ticks_ms()
+    if time.ticks_diff(now, _poll_at) < 0:
+        return
+    _poll_at = now + POLL_CHECK_MS
+    if fetch_apps():
+        _redraw = True
 
 
 def _get(url):
@@ -63,17 +78,38 @@ def _load_json():
 json_loads = _load_json()
 
 
+def _version_of(file):
+    """返回 apps 列表中该 file 的声明版本, 找不到返回 None。"""
+    for it in apps:
+        if it.get("file") == file:
+            return it.get("version")
+    return None
+
+
 def fetch_apps():
+    """拉取 apps.json(版本源), 更新 apps 列表。返回是否内容有变化。"""
     global apps, _last_apps
     text = _get(APPS_URL)
     if text is None or text == _last_apps:
-        return
+        return False
     _last_apps = text
     apps = _parse_apps(text)
+    return True
 
 
 def run_app(file):
+    """运行指定应用。仅在版本变化或未加载时下载 .py, 否则复用已加载的命名空间。"""
     global _sel_ns, _sel_ready
+    ver = _version_of(file)
+    need_dl = ver != _loaded_ver.get(file)
+    if not need_dl and _sel_ns is not None:
+        # 版本没变且已加载过 -> 复用, 不下载
+        print("[menu] reuse app:", file, "ver", ver)
+        _sel_ready = True
+        if "setup" in _sel_ns:
+            _sel_ns["setup"]()
+        return True
+
     text = _get(BIN_URL + file)
     if text is None:
         print("[menu] fetch app failed:", file)
@@ -82,10 +118,12 @@ def run_app(file):
         ns = {"__name__": "__app__"}
         exec(text, ns)
         _sel_ns = ns
+        _selected_file = file
+        _loaded_ver[file] = ver or "0"
         _sel_ready = True
         if "setup" in ns:
             ns["setup"]()
-        print("[menu] running app:", file)
+        print("[menu] run app:", file, "ver", ver)
         return True
     except BaseException as e:
         print("[menu] app load error:", e)
@@ -112,7 +150,9 @@ def _render_list():
     y = ROW_Y0
     for it in rows:
         name = it.get("name", it.get("file", "?"))
-        Widgets.Label(name, 3, y, 1.0,
+        ver = it.get("version")
+        label = "%s   v%s" % (name, ver) if ver else name
+        Widgets.Label(label, 3, y, 1.0,
                       0xFFFF00, 0x222222, Widgets.FONTS.DejaVu18)
         y += ROW_STEP
 
@@ -130,10 +170,13 @@ def _handle_touch():
     if 0 <= idx < len(apps):
         file = apps[idx].get("file")
         if file:
+            # 点选前先拉一次 apps.json, 保证版本对比基于最新清单
+            fetch_apps()
             run_app(file)
 
 
 def loop():
+    global _sel_ready, _redraw
     if _sel_ready and _sel_ns is not None:
         try:
             if "loop" in _sel_ns:
@@ -142,5 +185,10 @@ def loop():
             print("[menu] app loop error:", e)
         return
     M5.update()
+    # 菜单展示期: 周期性拉 apps.json 检查版本
+    _poll_check()
+    if _redraw:
+        _redraw = False
+        _render_list()
     _handle_touch()
     time.sleep_ms(10)
