@@ -22,7 +22,7 @@ import machine
 import requests2
 
 # ---- 配置区 -------------------------------------------------------------
-MENU_VERSION = "v1.3.0"          # menu 自身版本号
+MENU_VERSION = "v1.3.1"          # menu 自身版本号(修复 set_text_color 不存在)
 APPS_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/apps.json"
 BIN_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/"   # 应用 .py 所在目录
 FETCH_TIMEOUT_MS = 4000          # 网络超时(短), 避免长时间卡死主循环
@@ -143,16 +143,22 @@ def _render_list():
 
 
 def _refresh_row(idx):
-    """重绘第 idx 行(选中/未选中), 不再整屏重建。"""
+    """重绘第 idx 行(选中/未选中), 不再整屏重建。
+
+    仅用确定存在的方法: Lcd.fillRect(擦背景) + Label.setText(改文本)。
+    不用 set_text_color / setColor(该固件 Label 无此方法)。
+    选中用 ">" 前缀 + 绿色背景条标示。
+    """
     if idx < 0 or idx >= len(_rows):
         return
     lbl = _rows[idx]
     text = _row_label(idx)
+    row_y = ROW_Y0 + idx * ROW_STEP
     if idx == _cursor:
-        lbl.set_text_color(C_SEL_FG, C_SEL_BG)
+        M5.Lcd.fillRect(0, row_y, 320, ROW_STEP, C_SEL_BG)
         lbl.setText("> " + text)
     else:
-        lbl.set_text_color(0xFFFFFF, C_BG)
+        M5.Lcd.fillRect(0, row_y, 320, ROW_STEP, C_BG)
         lbl.setText("  " + text)
 
 
