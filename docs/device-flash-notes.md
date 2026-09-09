@@ -14,8 +14,9 @@
 2. 按官方 CoreS3 流程连接设备：
    - **无线**：查看设备 UIFlow2 启动屏上的 **Access Code** → 网页端「Connect Device」→ 输入 Access Code + 设备名 → 确认。
    - 或 **USB**：网页端 WebTerminal 选串口连接。
-3. 把本地 `device/loader.py` 的内容粘贴进 UIFlow2 编辑器的 Python 模式（或用底部导入将其作为程序）。
-   - loader 顶部的 `FETCH_URL` 已经是仓库地址 `https://raw.githubusercontent.com/bvcvb/led/master/key.py`，无需再改；若要改，以 `push.py` 输出的 `fetch_url` 为准。
+3. 在编辑器右上角把视图**切到 Python（代码）模式**（IDE 支持「块式 + Python 切换」），然后**整段替换**成本地 `device/loader.py` 的内容。
+   - loader 顶部的 `FETCH_URL` 已经是仓库地址 `https://raw.githubusercontent.com/bvcvb/led/master/key.py`，无需再改。
+   - **⚠️ 不要再写 `while True` 或 `if __name__ == "__main__"`**——那是 UIFlow2 自己负责的，写了会和它的运行框架冲突（正是报 `smodules`/`loop` 错误的原因）。本 loader 只提供 `setup()` 和 `loop()`。
 4. 点击右下角 **Run Always**（= 把程序下载到设备，且把设备 `boot_option` 设为 2，开机直接跑 `main.py`）。
 
 > 官方说明(见参考)：`Run Once` = 跑一次；`Run Always` = download 到设备并在 boot_option=2 下自启。后者正是我们要的。
