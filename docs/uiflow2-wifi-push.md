@@ -76,7 +76,7 @@
 
 ## 五、dsh 端：push.py 一键推送
 
-把本地 `src/key.py` 内容更新到仓库 `src/key.py`（或任意应用），设备的 menu 下个周期拉到。
+把本地 `src/key.py` 内容更新到仓库 `src/key.py`（或任意应用）。设备端 menu 会在**菜单展示期/点选时拉 `apps.json` 对比版本**，版本变了才重新下载应用。
 
 ```bash
 export GITHUB_TOKEN="github_pat_xxx"
@@ -101,7 +101,7 @@ GH_PATH=src/apps.json python3 push.py src/apps.json
 3. 设备上 menu 列表项点选 → 自动拉到新版运行   # 无需 USB
 ```
 
-想立即生效可重启设备（menu 重新拉取），否则 loader 周期性检查（默认 3s）自动拉取。
+想立即生效可重启设备（loader 重新拉取 `menu.py`；menu 重新拉 `apps.json`）。应用的更新靠菜单里版本对比，无需重启；`menu.py` 本身的更新需重启设备。
 
 ---
 
