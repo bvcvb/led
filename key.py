@@ -1,10 +1,14 @@
 import M5
 from M5 import *
 from module import FacesKeyboard3Module
+import machine
 
 
 # 应用版本号 —— 显示在屏幕上, 便于核对设备运行的是哪个版本
 APP_VERSION = "v1.0.1"
+# 触控重启的判定阈值(横屏方向, y 越大越靠下; 用 x 靠右的一角)
+RESTART_TOUCH_X = 280           # 触摸 x >= 此值 且 y 在下方 => 重启
+RESTART_TOUCH_Y = 120
 
 
 kb = None
@@ -14,6 +18,7 @@ line = ""
 lbl_mode = None
 lbl_key = None
 lbl_line = None
+lbl_version = None
 
 KEY_BACKSPACE = 0x08
 KEY_ENTER = 0x0D
@@ -95,12 +100,22 @@ def handle_touch():
     detail = M5.Touch.getDetail(0)
     if not detail[6]:  # wasClicked -> fresh tap only
         return
-    if M5.Touch.getY() >= 190:
+
+    x = M5.Touch.getX()
+    y = M5.Touch.getY()
+
+    # 右上角触摸 => 重启设备 (快捷方式, 不干扰键盘输入)
+    if x >= RESTART_TOUCH_X and y >= RESTART_TOUCH_Y:
+        print("[app] restart triggered by touch (x=%d,y=%d)" % (x, y))
+        machine.reset()
+
+    # 底部触摸 => 切换 NORMAL / DIRECT
+    if y >= 190:
         switch_mode()
 
 
 def setup():
-    global kb, lbl_mode, lbl_key, lbl_line
+    global kb, lbl_mode, lbl_key, lbl_line, lbl_version
     M5.begin()
     Widgets.setRotation(1)
     Widgets.fillScreen(0x222222)
@@ -108,13 +123,17 @@ def setup():
     Widgets.Title("Faces Keyboard3 Test", 3, 0xFFFFFF, 0x0000FF,
                   Widgets.FONTS.Montserrat18)
 
+    # 版本号: 放右上角, 文本短避免超宽截断
+    lbl_version = Widgets.Label(APP_VERSION, 200, 6, 1.0,
+                                0x00FFFF, 0x222222, Widgets.FONTS.DejaVu18)
+
     lbl_mode = Widgets.Label("MODE: NORMAL (char)", 3, 42, 1.0,
                              0x00FF00, 0x222222, Widgets.FONTS.DejaVu18)
     lbl_key = Widgets.Label("KEY: --", 3, 78, 1.0,
                             0xFFFFFF, 0x222222, Widgets.FONTS.DejaVu18)
     lbl_line = Widgets.Label("(type on the keyboard)", 3, 114, 1.0,
                              0xFFFF00, 0x222222, Widgets.FONTS.DejaVu18)
-    Widgets.Label(APP_VERSION + " TAP HERE: switch NORMAL / DIRECT", 3, 200, 1.0,
+    Widgets.Label("TAP bottom: switch  |  TAP top-right: restart", 3, 200, 1.0,
                   0xFFFFFF, 0x0055AA, Widgets.FONTS.DejaVu18)
 
     kb = FacesKeyboard3Module(address=0x08)
