@@ -3,6 +3,10 @@ from M5 import *
 from module import FacesKeyboard3Module
 
 
+# 应用版本号 —— 显示在屏幕上, 便于核对设备运行的是哪个版本
+APP_VERSION = "v1.0.0"
+
+
 kb = None
 mode = "NORMAL"
 line = ""
@@ -110,7 +114,7 @@ def setup():
                             0xFFFFFF, 0x222222, Widgets.FONTS.DejaVu18)
     lbl_line = Widgets.Label("(type on the keyboard)", 3, 114, 1.0,
                              0xFFFF00, 0x222222, Widgets.FONTS.DejaVu18)
-    Widgets.Label("TAP HERE: switch NORMAL / DIRECT", 3, 200, 1.0,
+    Widgets.Label(APP_VERSION + " TAP HERE: switch NORMAL / DIRECT", 3, 200, 1.0,
                   0xFFFFFF, 0x0055AA, Widgets.FONTS.DejaVu18)
 
     kb = FacesKeyboard3Module(address=0x08)
