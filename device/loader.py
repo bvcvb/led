@@ -24,12 +24,15 @@ import requests2
 
 # ---- 配置区 -------------------------------------------------------------
 FETCH_URL = "https://raw.githubusercontent.com/bvcvb/led/master/key.py"
-POLL_INTERVAL_MS = 5000          # 拉取/轮询间隔(毫秒)
+POLL_INTERVAL_MS = 5000          # 拉取检查间隔(毫秒) —— 低频走网络
+APP_TICK_MS = 15                 # 应用渲染刷新间隔(毫秒) —— 高频驱动 UI
 FETCH_TIMEOUT_MS = 10000         # 单次 GET 超时(毫秒)
 # ------------------------------------------------------------------------
 
 _last_code = None
 _app_ns = None                   # 应用代码的命名空间
+_last_poll_ms = 0                # 上次拉取的时间(ticks_ms)
+_first_load = True               # 首次进入主循环时强制拉一次
 
 
 def fetch_code():
@@ -79,19 +82,28 @@ def setup():
 
 
 def loop():
-    # 1) 拉取新代码: 有更新就加载并重建应用上下文
-    code = fetch_code()
-    if code:
-        print("[loader] got new code, (%d bytes)" % len(code))
-        if load_app(code):
-            print("[loader] app loaded")
-            app_setup()
-    # 2) 驱动应用渲染循环(若已加载)
+    global _last_poll_ms, _first_load
+
+    # 低频: 按计时触发拉取(默认 5s 一次), 避免每轮阻塞网络
+    now = time.ticks_ms()
+    if _first_load or time.ticks_diff(now, _last_poll_ms) >= POLL_INTERVAL_MS:
+        _first_load = False
+        _last_poll_ms = now
+        code = fetch_code()
+        if code:
+            print("[loader] got new code, (%d bytes)" % len(code))
+            if load_app(code):
+                print("[loader] app loaded")
+                app_setup()
+
+    # 高频: 持续驱动应用渲染(画面/触控/键盘不卡顿)
     try:
         app_loop()
     except BaseException as e:
         print("[loader] app loop error:", e)
-    time.sleep_ms(POLL_INTERVAL_MS)
+
+    # 短暂休眠给 CPU 喘口气, 保持 UI 高频刷新
+    time.sleep_ms(APP_TICK_MS)
 
 
 if __name__ == "__main__":
