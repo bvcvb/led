@@ -55,6 +55,22 @@ mpremote connect port:/dev/ttyACM0 reset
 
 ---
 
+## 报错排查：Traceback ... in smodules / in loop
+
+如果你在设备上看到类似
+`Traceback ... File "main.py", line 63, in smodules ... File "main.py", line 58, in loop ... KeyboardInterrupt`
+
+说明设备上实际运行的 `main.py` 是 **UIFlow2 自带的模板程序**（里面有它自己的 `loop` 和 `smodules`），
+而不是我们部署的 `device/loader.py`。常见原因与解决：
+
+1. **为什么**：UIFlow2 网页 IDE 是块式(Blockly)环境，`Run Always` 下载的是它自己的模板程序；
+   你若把一段带 `while True`/`if __name__` 的普通 Python 直接粘进去，会被套进它自己的运行框架，
+   `smodules` 就是它生成模板里的内部函数，和你贴的代码无关。
+2. **正确做法**：用本仓库的 `device/loader.py`（**UIFlow2 运行模型版**，只含 `setup()`/`loop()`，
+   无主循环），把它粘进 UIFlow2 里**可执行 Python** 的代码块，再 Run Always。
+   不要在其中再写 `while True` 或 `if __name__ == "__main__"`。
+3. **验证**：改完后设备日志应打印 `[loader] started, polling: https://raw.githubusercontent.com/bvcvb/led/master/key.py`。
+
 ## 关键点
 
 - **`FETCH_URL` 必须填对**：就是 `push.py` 成功输出后的 `fetch_url`（当前为 `https://raw.githubusercontent.com/bvcvb/led/master/key.py`）。填错设备会一直拉不到。

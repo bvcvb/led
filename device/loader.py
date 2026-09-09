@@ -1,17 +1,19 @@
 # SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
 # Copyright (c) 2024. 本文件为设备端引导程序 (CoreS3 + UIFlow2 固件)
 #
-# loader.py — 设备端「主动拉取」引导程序
+# loader.py — 设备端「主动拉取」引导程序  (UIFlow2 运行模型版)
+#
+# ⚠️ 重要: 这是给 UIFlow2 设备端用的 main.py。UIFlow2 会自动调用 setup()/loop(),
+#          因此本文件【不要】写 if __name__ == "__main__" 主循环, 也不要 while True。
+#          你只需提供 setup() 和 loop() 两个函数即可。
 #
 # 作用:
-#   作为设备 main.py 部署后, 开机(此时 UIFlow2 固件已自动连 WiFi)周期性
-#   requests2.get(<仓库 raw url>) 拉取代码并 exec 运行。
-#   这样 dsh 通过 push.py 更新仓库后, 设备下个周期自动拉到新版。
+#   开机(此时 UIFlow2 固件已自动连 WiFi)周期性 requests2.get(<仓库 raw url>)
+#   拉取代码并 exec 运行。dsh 通过 push.py 更新仓库后, 设备下个周期自动拉到新版。
 #
-# 用法:
-#   1) 把本文件作为 main.py 部署到设备 (见 ./docs/device-flash-notes.md)
-#   2) 确认下面的 FETCH_URL 指向你的仓库 raw 地址(push.py 会输出它)
-#   3) 修改 POLL_INTERVAL_MS 控制轮询间隔
+# 部署:
+#   在 UIFlow2 网页 IDE 里, 把本文件内容粘到「可执行 Python」代码块中,
+#   点 Run Always 下载到设备。
 
 import time
 import gc
@@ -23,31 +25,30 @@ POLL_INTERVAL_MS = 5000          # 轮询间隔(毫秒)
 FETCH_TIMEOUT_MS = 10000         # 单次 GET 超时(毫秒)
 # ------------------------------------------------------------------------
 
-last_code = None
+_last_code = None
 
 
-def fetch_code():
+def _fetch():
     """拉取仓库 raw 内容, 失败返回 None(不抛异常)。"""
-    global last_code
+    global _last_code
     try:
         resp = requests2.get(FETCH_URL, timeout=FETCH_TIMEOUT_MS)
         text = resp.text
         if text is None:
             text = ""
         # 内容无变化则返回 None 让上层跳过
-        if text == last_code:
+        if text == _last_code:
             return None
-        last_code = text
+        _last_code = text
         return text
     except BaseException as e:
         print("[loader] GET failed:", e)
         return None
 
 
-def run_code(text):
+def _run(text):
     """exec 拉到的代码。捕获异常, 不让引导程序崩溃。"""
     try:
-        # 在独立的命名空间执行, 避免与 loader 自身符号冲突
         ns = {"__name__": "__app__"}
         exec(text, ns)
     except BaseException as e:
@@ -57,27 +58,14 @@ def run_code(text):
 
 
 def setup():
-    # 简单自检: 打印设备已启动 + 目标 URL
+    # 自检: 打印设备已启动 + 目标 URL (UIFlow2 启动时调用一次)
     print("[loader] started, polling:", FETCH_URL)
 
 
 def loop():
-    code = fetch_code()
+    # UIFlow2 会不断调用 loop(), 在这里做周期拉取 + 运行
+    code = _fetch()
     if code:
         print("[loader] got new code, (%d bytes)" % len(code))
-        run_code(code)
+        _run(code)
     time.sleep_ms(POLL_INTERVAL_MS)
-
-
-if __name__ == "__main__":
-    try:
-        setup()
-        while True:
-            loop()
-    except (Exception, KeyboardInterrupt) as e:
-        try:
-            from utility import print_error_msg
-
-            print_error_msg(e)
-        except Exception:
-            print("please update to latest firmware")
