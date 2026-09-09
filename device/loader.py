@@ -5,12 +5,12 @@
 #
 # 作用:
 #   作为设备 main.py 部署后, 开机(此时 UIFlow2 固件已自动连 WiFi)周期性
-#   requests2.get(<gist raw url>) 拉取代码并 exec 运行。
-#   这样 dsh 通过 push.py 更新 gist 后, 设备下个周期自动拉到新版。
+#   requests2.get(<仓库 raw url>) 拉取代码并 exec 运行。
+#   这样 dsh 通过 push.py 更新仓库后, 设备下个周期自动拉到新版。
 #
 # 用法:
 #   1) 把本文件作为 main.py 部署到设备 (见 ./docs/device-flash-notes.md)
-#   2) 修改下面的 FETCH_URL 为 push.py 输出的 raw 地址
+#   2) 确认下面的 FETCH_URL 指向你的仓库 raw 地址(push.py 会输出它)
 #   3) 修改 POLL_INTERVAL_MS 控制轮询间隔
 
 import time
@@ -20,7 +20,6 @@ import requests2
 # ---- 配置区 -------------------------------------------------------------
 FETCH_URL = "https://raw.githubusercontent.com/bvcvb/led/master/key.py"
 POLL_INTERVAL_MS = 5000          # 轮询间隔(毫秒)
-MAX_INLINE_BYTES = 20 * 1024     # 超过此大小不做 inline 提示(仅日志用)
 FETCH_TIMEOUT_MS = 10000         # 单次 GET 超时(毫秒)
 # ------------------------------------------------------------------------
 
@@ -28,7 +27,7 @@ last_code = None
 
 
 def fetch_code():
-    """拉取 Gist 内容, 失败返回 None(不抛异常)。"""
+    """拉取仓库 raw 内容, 失败返回 None(不抛异常)。"""
     global last_code
     try:
         resp = requests2.get(FETCH_URL, timeout=FETCH_TIMEOUT_MS)
