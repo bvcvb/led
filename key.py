@@ -5,7 +5,7 @@ import machine
 
 
 # 应用版本号 —— 显示在屏幕上, 便于核对设备运行的是哪个版本
-APP_VERSION = "v1.0.4"           # 此次: 主循环直接轮询 _read_key(不走 schedule/中断)+ 高频采样
+APP_VERSION = "v1.0.5"           # 此次: 补上缺失的 KEY_BACKSPACE/ENTER/DELETE 常量定义
 # 触控重启按钮的屏幕区域(横屏 CoreS3 320x240; 放右上角)
 RESTART_BTN_X = 250              # 按钮区域左边界
 RESTART_BTN_Y = 6                # 按钮区域上边界
@@ -21,6 +21,11 @@ lbl_mode = None
 lbl_key = None
 lbl_line = None
 lbl_version = None
+
+# 键盘控制键的 ASCII 码(与 FacesKeyboard3 一致)
+KEY_BACKSPACE = 0x08
+KEY_ENTER = 0x0D
+KEY_DELETE = 0x7F
 
 
 def safe_set_led(left, right):
