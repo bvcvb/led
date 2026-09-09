@@ -2,11 +2,10 @@ import M5
 from M5 import *
 from module import FacesKeyboard3Module
 import machine
-from machine import Pin
 
 
 # 应用版本号 —— 显示在屏幕上, 便于核对设备运行的是哪个版本
-APP_VERSION = "v1.0.3"           # 此次: IRQ 中断采集 + 可见重启按钮
+APP_VERSION = "v1.0.4"           # 此次: 主循环直接轮询 _read_key(不走 schedule/中断)+ 高频采样
 # 触控重启按钮的屏幕区域(横屏 CoreS3 320x240; 放右上角)
 RESTART_BTN_X = 250              # 按钮区域左边界
 RESTART_BTN_Y = 6                # 按钮区域上边界
@@ -23,9 +22,6 @@ lbl_key = None
 lbl_line = None
 lbl_version = None
 
-# 用 IRQ 中断捕获的按键队列: 中断里入队, 主循环里逐个取出处理, 避免快速连按丢键
-key_queue = []
-
 
 def safe_set_led(left, right):
     # set_led() only works in DIRECT mode; guard against firmware quirks.
@@ -37,7 +33,8 @@ def safe_set_led(left, right):
 
 def on_key(arg):
     global line
-    # 回调绝不允许抛异常: 一旦抛错会中断队列处理。UI/日志全部包进 try/except。
+    # 回调绝不允许抛异常: micropython.schedule 的回调一旦抛错会破坏调度器,
+    # 导致后续按键回调全部丢失。UI/日志全部包进 try/except。
     try:
         if mode == "NORMAL":
             code = int(arg)
@@ -72,6 +69,7 @@ def on_key(arg):
 
         print("key event:", mode, repr(arg))
     except BaseException as e:
+        # 仅打印, 绝不再抛, 保住 schedule 调度器
         print("[on_key] handler error:", e)
 
 
@@ -92,21 +90,6 @@ def switch_mode():
         lbl_mode.setText("MODE: NORMAL (char)")
         lbl_key.setText("KEY: --")
         lbl_line.setText("(type on the keyboard)")
-
-
-def _key_irq_handler(pin):
-    """IRQ 边沿触发回调: 在按键电平跳变的瞬间入队, 不让主循环错过快速连按。
-
-    注意: 中断回调里不能做阻塞操作/分配内存。这里只读 I2C 键码并入队(短)。
-    """
-    try:
-        data = kb._read_key()
-        if data is not None:
-            key_queue.append(data)
-            if len(key_queue) > 64:      # 限制队列长度, 避免内存膨胀
-                key_queue.pop(0)
-    except BaseException:
-        pass
 
 
 def handle_touch():
@@ -164,24 +147,17 @@ def setup():
     kb = FacesKeyboard3Module(address=0x08)
     kb.set_callback(on_key)
     kb.set_mode(FacesKeyboard3Module.NORMAL)
-    # 用 IRQ 中断捕获按键(边沿触发), 彻底解决快速连按丢键
-    try:
-        kb._irq.irq(trigger=Pin.IRQ_FALLING, handler=_key_irq_handler)
-        print("[app] key IRQ enabled")
-    except BaseException as e:
-        print("[app] key IRQ setup failed:", e)
 
 
 def loop():
     M5.update()
-    # 从 IRQ 采集的队列中逐个取出按键处理(不丢快速连按)
-    try:
-        while key_queue:
-            data = key_queue.pop(0)
-            if len(data) == 2 and data[0] == 0x0D and data[1] == 0x0A:
-                on_key(KEY_ENTER)
-            else:
-                on_key(data[0])
-    except BaseException as e:
-        print("[app] queue process error:", e)
+    # 直接轮询键盘读取(不走 kb.tick() 的 schedule 队列), 每帧读到一个立即处理,
+    # 避免 schedule 队列覆盖导致的按键丢失。
+    data = kb._read_key()
+    if data is not None:
+        # NORMAL 模式: _read_key 返回 1 字节; ENTER 会返回 b"\r\n"
+        if len(data) == 2 and data[0] == 0x0D and data[1] == 0x0A:
+            on_key(KEY_ENTER)
+        else:
+            on_key(data[0])
     handle_touch()

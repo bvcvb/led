@@ -25,7 +25,7 @@ import requests2
 # ---- 配置区 -------------------------------------------------------------
 FETCH_URL = "https://raw.githubusercontent.com/bvcvb/led/master/key.py"
 FETCH_TIMEOUT_MS = 10000         # 首次拉取超时(毫秒)
-APP_TICK_MS = 15                 # 应用渲染刷新间隔(毫秒)
+APP_TICK_MS = 5                  # 应用渲染刷新间隔(毫秒) —— 调小提高按键轮询采样率
 # ------------------------------------------------------------------------
 
 _last_code = None
