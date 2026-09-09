@@ -5,7 +5,7 @@ import machine
 
 
 # 应用版本号 —— 显示在屏幕上, 便于核对设备运行的是哪个版本
-APP_VERSION = "v1.0.1"
+APP_VERSION = "v1.0.2"
 # 触控重启的判定阈值(横屏方向, y 越大越靠下; 用 x 靠右的一角)
 RESTART_TOUCH_X = 280           # 触摸 x >= 此值 且 y 在下方 => 重启
 RESTART_TOUCH_Y = 120
