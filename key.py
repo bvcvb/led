@@ -26,38 +26,44 @@ def safe_set_led(left, right):
 
 def on_key(arg):
     global line
-    if mode == "NORMAL":
-        code = int(arg)
-        if code == KEY_BACKSPACE:
-            line = line[:-1]
-            lbl_key.setText("KEY: BACKSPACE")
-        elif code == KEY_ENTER:
-            line += "\n"
-            lbl_key.setText("KEY: ENTER")
-        elif code == KEY_DELETE:
-            line = line[:-1]
-            lbl_key.setText("KEY: DELETE")
-        elif 32 <= code <= 126:
-            line += chr(code)
-            lbl_key.setText("KEY: '%s' (0x%02X)" % (chr(code), code))
-        else:
-            lbl_key.setText("KEY: 0x%02X" % code)
+    # 回调绝不允许抛异常: micropython.schedule 的回调一旦抛错会破坏调度器,
+    # 导致后续按键回调全部丢失。UI/日志全部包进 try/except。
+    try:
+        if mode == "NORMAL":
+            code = int(arg)
+            if code == KEY_BACKSPACE:
+                line = line[:-1]
+                lbl_key.setText("KEY: BACKSPACE")
+            elif code == KEY_ENTER:
+                line += "\n"
+                lbl_key.setText("KEY: ENTER")
+            elif code == KEY_DELETE:
+                line = line[:-1]
+                lbl_key.setText("KEY: DELETE")
+            elif 32 <= code <= 126:
+                line += chr(code)
+                lbl_key.setText("KEY: '%s' (0x%02X)" % (chr(code), code))
+            else:
+                lbl_key.setText("KEY: 0x%02X" % code)
 
-        if line:
-            lbl_line.setText("> " + line[-36:].replace("\n", " | "))
+            if line:
+                lbl_line.setText("> " + line[-36:].replace("\n", " | "))
+            else:
+                lbl_line.setText("(type on the keyboard)")
         else:
-            lbl_line.setText("(type on the keyboard)")
-    else:
-        # DIRECT mode: callback receives a tuple of pressed key names.
-        names = arg
-        if names:
-            lbl_key.setText("KEYS: " + str(names))
-            safe_set_led(True, True)
-        else:
-            lbl_key.setText("KEYS: (none)")
-            safe_set_led(False, False)
+            # DIRECT mode: callback receives a tuple of pressed key names.
+            names = arg
+            if names:
+                lbl_key.setText("KEYS: " + str(names))
+                safe_set_led(True, True)
+            else:
+                lbl_key.setText("KEYS: (none)")
+                safe_set_led(False, False)
 
-    print("key event:", mode, repr(arg))
+        print("key event:", mode, repr(arg))
+    except BaseException as e:
+        # 仅打印, 绝不再抛, 保住 schedule 调度器
+        print("[on_key] handler error:", e)
 
 
 def switch_mode():
