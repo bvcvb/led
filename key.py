@@ -4,7 +4,7 @@ from module import FacesKeyboard3Module
 
 
 # 应用版本号 —— 显示在屏幕上, 便于核对设备运行的是哪个版本
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.0.1"
 
 
 kb = None
