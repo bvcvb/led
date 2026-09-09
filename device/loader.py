@@ -24,14 +24,15 @@ import requests2
 
 # ---- 配置区 -------------------------------------------------------------
 FETCH_URL = "https://raw.githubusercontent.com/bvcvb/led/master/key.py"
-FETCH_TIMEOUT_MS = 10000         # 首次拉取超时(毫秒)
-APP_TICK_MS = 5                  # 应用渲染刷新间隔(毫秒) —— 调小提高按键轮询采样率
+FETCH_TIMEOUT_MS = 10000         # 单次 GET 超时(毫秒)
+POLL_INTERVAL_MS = 3000          # 周期性拉取检查间隔(毫秒) —— 非阻塞, 用计时触发
+APP_TICK_MS = 5                  # 应用渲染刷新间隔(毫秒)
 # ------------------------------------------------------------------------
 
 _last_code = None
 _app_ns = None                   # 应用代码的命名空间
 _app_ready = False               # 应用是否已加载成功
-_retry_at = 0                    # 下次重试拉取的时间点(ticks_ms)
+_poll_at = 0                     # 下次拉取检查的时间点(ticks_ms)
 
 
 def fetch_code():
@@ -76,37 +77,33 @@ def app_loop():
 
 
 def setup():
-    """loader 自检 + 首次拉取并加载应用(只做一次, 避免运行中网络阻塞丢按键)。"""
-    global _app_ready
-    print("[loader] started, loading from:", FETCH_URL)
-    text = fetch_code()
-    if text:
-        if load_app(text):
-            print("[loader] app loaded")
-            app_setup()
-            _app_ready = True
-    else:
-        print("[loader] no code fetched at boot")
+    """loader 自检。首次拉取在 loop() 里以计时方式触发(避免阻塞主循环)。"""
+    global _poll_at
+    print("[loader] started, polling every %dms:" % POLL_INTERVAL_MS, FETCH_URL)
+    _poll_at = time.ticks_ms()   # 让首帧立即拉取一次
 
 
 def loop():
-    global _app_ready, _retry_at
-    # 应用已加载: 每轮只驱动应用渲染/事件, 不做任何网络请求
+    global _app_ready, _poll_at
+
+    # 周期性检查新代码(非阻塞): 到时间就拉一次, 不阻塞 UI 刷新
+    now = time.ticks_ms()
+    if time.ticks_diff(now, _poll_at) >= 0:
+        _poll_at = now + POLL_INTERVAL_MS
+        text = fetch_code()
+        if text is not None:          # 有新内容(变化)才重建
+            print("[loader] got new code, (%d bytes)" % len(text))
+            if load_app(text):
+                print("[loader] app loaded")
+                app_setup()
+                _app_ready = True
+
+    # 持续驱动应用渲染/事件
     if _app_ready:
         try:
             app_loop()
         except BaseException as e:
             print("[loader] app loop error:", e)
-    else:
-        # 应用未加载(开机拉取失败时): 每 3s 低频重试, 不阻塞 UI
-        now = time.ticks_ms()
-        if time.ticks_diff(now, _retry_at) >= 0:
-            _retry_at = now + 3000
-            text = fetch_code()
-            if text and load_app(text):
-                print("[loader] app loaded (retry)")
-                app_setup()
-                _app_ready = True
 
     time.sleep_ms(APP_TICK_MS)
 
