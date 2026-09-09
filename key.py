@@ -143,5 +143,13 @@ def setup():
 
 def loop():
     M5.update()
-    kb.tick()
+    # 直接轮询键盘读取(而非 kb.tick() 的 schedule 队列), 每帧读到一个立即处理,
+    # 从根源避免 schedule 队列覆盖导致的按键丢失。
+    data = kb._read_key()
+    if data is not None:
+        # NORMAL 模式: _read_key 返回 1 字节; ENTER 会返回 b"\r\n"
+        if len(data) == 2 and data[0] == 0x0D and data[1] == 0x0A:
+            on_key(KEY_ENTER)
+        else:
+            on_key(data[0])
     handle_touch()
