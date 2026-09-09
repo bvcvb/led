@@ -1,15 +1,17 @@
 # SPDX-FileCopyrightText: 2024 M5Stack Technology CO LTD
 # Copyright (c) 2024. 本文件为设备端「应用选择器」(CoreS3 + UIFlow2 固件)
 #
-# menu.py — 应用菜单: 列出仓库里的应用, 点选后下载并运行
+# menu.py — 应用菜单: 列出仓库里的应用, 点击选中, 再点击运行
 #
 # 角色: 由 device/loader.py 拉取并作为主应用运行。它负责:
-#   1. 请求仓库根目录下的 apps.json, 拿到应用清单
-#   2. 在屏幕上列出应用条目, 用户点选
-#   3. 点选后拉取该应用的 .py, exec 并运行(setup/loop)
+#   1. 请求仓库 src/apps.json, 拿到应用清单(含 version)
+#   2. 屏幕上列出应用, 首次点击高亮选中, 再次点击运行
+#   3. 运行前按 version 对比, 版本变了才下载 .py, 否则复用
 #
-# ⚠️ 与 loader 的关系: 本文件只提供 setup()/loop(), 由 loader 的 while True 调度。
-#    运行选中应用时, 每轮把执行权交给该应用的 loop()。
+# 性能注意:
+#   - 选中不整屏重建(仅更新受影响行), 保证点击响应快
+#   - 下载用短超时 + 一次性动作, 不长期阻塞主循环导致"没反应"
+#   - 菜单展示期低频拉 apps.json, 点选时不再二次网络请求
 
 import time
 
@@ -19,12 +21,18 @@ from M5 import Widgets
 import requests2
 
 # ---- 配置区 -------------------------------------------------------------
+MENU_VERSION = "v1.2.0"          # menu 自身版本号
 APPS_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/apps.json"
 BIN_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/"   # 应用 .py 所在目录
-FETCH_TIMEOUT_MS = 10000
-POLL_CHECK_MS = 3000         # 菜单展示期: 周期性拉 apps.json 检查版本(毫秒)
-ROW_Y0 = 80                 # 第一行应用列表的 y
-ROW_STEP = 50               # 每行间距
+FETCH_TIMEOUT_MS = 4000          # 网络超时(短), 避免长时间卡死主循环
+POLL_CHECK_MS = 5000             # 菜单展示期: 周期性拉 apps.json 检查版本(毫秒)
+ROW_Y0 = 80                      # 第一行应用列表的 y
+ROW_STEP = 50                    # 每行间距
+# 颜色
+C_BG = 0x222222
+C_SEL_BG = 0x00FF00              # 选中行背景
+C_SEL_FG = 0x000000              # 选中行文字
+C_NORM_FG = 0xFFFF00             # 普通行文字
 # ------------------------------------------------------------------------
 
 apps = []                   # [{name,file,version}, ...]
@@ -33,19 +41,8 @@ _sel_ready = False
 _last_apps = None
 _loaded_ver = {}            # file -> 已加载应用的 version(用于判断是否需重新下载)
 _poll_at = 0                # 下次检查版本的时间点(ticks_ms)
-_redraw = False             # 列表内容变化, 需要重绘
-_cursor = -1                # 当前选中的行号(-1 表示未选中); 用于高亮/二次确认
-
-
-def _poll_check():
-    """菜单展示期周期性拉 apps.json; 内容变化则重绘列表(显示最新版本)。"""
-    global _poll_at, _redraw
-    now = time.ticks_ms()
-    if time.ticks_diff(now, _poll_at) < 0:
-        return
-    _poll_at = now + POLL_CHECK_MS
-    if fetch_apps():
-        _redraw = True
+_cursor = -1                # 当前选中的行号(-1 表示未选中)
+_rows = []                  # 每行的 Label 对象 [ [label_obj, idx], ... ]
 
 
 def _get(url):
@@ -80,7 +77,6 @@ json_loads = _load_json()
 
 
 def _version_of(file):
-    """返回 apps 列表中该 file 的声明版本, 找不到返回 None。"""
     for it in apps:
         if it.get("file") == file:
             return it.get("version")
@@ -88,7 +84,7 @@ def _version_of(file):
 
 
 def fetch_apps():
-    """拉取 apps.json(版本源), 更新 apps 列表。返回是否内容有变化。"""
+    """拉取 apps.json, 更新 apps 清单。返回是否内容变化。"""
     global apps, _last_apps
     text = _get(APPS_URL)
     if text is None or text == _last_apps:
@@ -98,19 +94,70 @@ def fetch_apps():
     return True
 
 
+def _row_label(idx):
+    """构造第 idx 行的显示字符串。"""
+    it = apps[idx]
+    name = it.get("name", it.get("file", "?"))
+    ver = it.get("version")
+    return ("%s   v%s" % (name, ver)) if ver else name
+
+
+def _render_list():
+    """整屏绘制菜单列表(仅在需要时调用一次)。"""
+    global _rows
+    Widgets.fillScreen(C_BG)
+    Widgets.Title("App Menu", 3, 0xFFFFFF, 0x0000FF,
+                  Widgets.FONTS.Montserrat18)
+    _rows = []
+    fetch_apps()
+    rows = apps if apps else []
+    if not rows:
+        Widgets.Label("(no apps found)", 3, ROW_Y0, 1.0,
+                      0xFFFFFF, C_BG, Widgets.FONTS.DejaVu18)
+        return
+    y = ROW_Y0
+    for i in range(len(rows)):
+        lbl = Widgets.Label("  " + _row_label(i), 3, y, 1.0,
+                            0xFFFFFF, C_BG, Widgets.FONTS.DejaVu18)
+        _rows.append(lbl)
+        y += ROW_STEP
+    Widgets.Label("tap to select | tap again to run", 3, 200, 1.0,
+                  0xFFFFFF, 0x0055AA, Widgets.FONTS.DejaVu18)
+
+
+def _refresh_row(idx):
+    """重绘第 idx 行(选中/未选中), 不再整屏重建。"""
+    if idx < 0 or idx >= len(_rows):
+        return
+    lbl = _rows[idx]
+    text = _row_label(idx)
+    if idx == _cursor:
+        lbl.set_text_color(C_SEL_FG, C_SEL_BG)
+        lbl.setText("> " + text)
+    else:
+        lbl.set_text_color(0xFFFFFF, C_BG)
+        lbl.setText("  " + text)
+
+
+def _render_immediate_or_schedule():
+    """选中变化后: 重绘旧选中行(刷回未选中) 和 新选中行(高亮)。"""
+    for i in range(len(_rows)):
+        _refresh_row(i)
+
+
 def run_app(file):
-    """运行指定应用。仅在版本变化或未加载时下载 .py, 否则复用已加载的命名空间。"""
+    """运行指定应用。版本变化或未加载才下载 .py; 否则复用。"""
     global _sel_ns, _sel_ready
     ver = _version_of(file)
     need_dl = ver != _loaded_ver.get(file)
     if not need_dl and _sel_ns is not None:
-        # 版本没变且已加载过 -> 复用, 不下载
         print("[menu] reuse app:", file, "ver", ver)
         _sel_ready = True
         if "setup" in _sel_ns:
             _sel_ns["setup"]()
         return True
 
+    print("[menu] downloading:", file)
     text = _get(BIN_URL + file)
     if text is None:
         print("[menu] fetch app failed:", file)
@@ -119,7 +166,6 @@ def run_app(file):
         ns = {"__name__": "__app__"}
         exec(text, ns)
         _sel_ns = ns
-        _selected_file = file
         _loaded_ver[file] = ver or "0"
         _sel_ready = True
         if "setup" in ns:
@@ -132,45 +178,12 @@ def run_app(file):
         return False
 
 
-def setup():
-    M5.begin()
-    Widgets.setRotation(1)
-    _render_list()
-
-
-def _render_list():
-    Widgets.fillScreen(0x222222)
-    Widgets.Title("App Menu", 3, 0xFFFFFF, 0x0000FF,
-                  Widgets.FONTS.Montserrat18)
-    fetch_apps()
-    rows = apps if apps else []
-    if not rows:
-        Widgets.Label("(no apps found)", 3, ROW_Y0, 1.0,
-                      0xFFFFFF, 0x222222, Widgets.FONTS.DejaVu18)
-        return
-    y = ROW_Y0
-    for i, it in enumerate(rows):
-        name = it.get("name", it.get("file", "?"))
-        ver = it.get("version")
-        label = "%s   v%s" % (name, ver) if ver else name
-        if i == _cursor:
-            # 选中行: 高亮背景色 + 前缀箭头
-            Widgets.Label("> " + label, 3, y, 1.0,
-                          0x000000, 0x00FF00, Widgets.FONTS.DejaVu18)
-        else:
-            Widgets.Label("  " + label, 3, y, 1.0,
-                          0xFFFF00, 0x222222, Widgets.FONTS.DejaVu18)
-        y += ROW_STEP
-    Widgets.Label("tap to select  |  tap again to run", 3, 200, 1.0,
-                  0xFFFFFF, 0x0055AA, Widgets.FONTS.DejaVu18)
-
-
 def _handle_touch():
-    global _cursor, _redraw
+    global _cursor
     if M5.Touch.getCount() <= 0:
         return
     detail = M5.Touch.getDetail(0)
-    if not detail[6]:
+    if not detail[6]:        # wasClicked -> 仅点击触发(避免拖动误触)
         return
     y = M5.Touch.getY()
     if not apps or y < ROW_Y0:
@@ -178,19 +191,22 @@ def _handle_touch():
     idx = (y - ROW_Y0) // ROW_STEP
     if 0 <= idx < len(apps):
         if idx == _cursor:
-            # 再次点击已选中的行 => 运行
             file = apps[idx].get("file")
             if file:
-                fetch_apps()
                 run_app(file)
         else:
-            # 首次点击 => 选中该行(高亮)
             _cursor = idx
-            _redraw = True
+            _render_immediate_or_schedule()
+
+
+def setup():
+    M5.begin()
+    Widgets.setRotation(1)
+    _render_list()
 
 
 def loop():
-    global _sel_ready, _redraw
+    global _sel_ready
     if _sel_ready and _sel_ns is not None:
         try:
             if "loop" in _sel_ns:
@@ -199,10 +215,11 @@ def loop():
             print("[menu] app loop error:", e)
         return
     M5.update()
-    # 菜单展示期: 周期性拉 apps.json 检查版本
-    _poll_check()
-    if _redraw:
-        _redraw = False
-        _render_list()
+    # 菜单展示期低频拉 apps.json 检查版本(不阻塞太久)
+    now = time.ticks_ms()
+    if time.ticks_diff(now, _poll_at) >= 0:
+        _poll_at = now + POLL_CHECK_MS
+        if apps and fetch_apps():
+            _render_list()
     _handle_touch()
     time.sleep_ms(10)
