@@ -147,7 +147,7 @@ def _render_immediate_or_schedule():
 
 def run_app(file):
     """运行指定应用。版本变化或未加载才下载 .py; 否则复用。"""
-    global _sel_ns, _sel_ready
+    global _sel_ns, _sel_ready, _loaded_ver
     ver = _version_of(file)
     need_dl = ver != _loaded_ver.get(file)
     if not need_dl and _sel_ns is not None:
@@ -206,7 +206,7 @@ def setup():
 
 
 def loop():
-    global _sel_ready
+    global _sel_ready, _poll_at
     if _sel_ready and _sel_ns is not None:
         try:
             if "loop" in _sel_ns:
