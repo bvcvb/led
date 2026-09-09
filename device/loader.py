@@ -16,14 +16,14 @@
 # 部署(mpremote, 在你自己电脑上):
 #   mpremote connect /dev/ttyACM0 cp device/loader.py :main.py
 #   mpremote connect /dev/ttyACM0 reset
-# 之后业务更新走: python3 push.py  (自动推 key.py 到 bvcvb/led/master/key.py)
+# 之后业务更新走: python3 push.py  (自动推 src/key.py 到 bvcvb/led/master/src/key.py)
 
 import time
 import gc
 import requests2
 
 # ---- 配置区 -------------------------------------------------------------
-FETCH_URL = "https://raw.githubusercontent.com/bvcvb/led/master/menu.py"
+FETCH_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/menu.py"
 FETCH_TIMEOUT_MS = 10000         # 单次 GET 超时(毫秒)
 POLL_INTERVAL_MS = 3000          # 周期性拉取检查间隔(毫秒) —— 非阻塞, 用计时触发
 APP_TICK_MS = 5                  # 应用渲染刷新间隔(毫秒)

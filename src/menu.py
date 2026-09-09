@@ -19,8 +19,8 @@ from M5 import Widgets
 import requests2
 
 # ---- 配置区 -------------------------------------------------------------
-APPS_URL = "https://raw.githubusercontent.com/bvcvb/led/master/apps.json"
-BIN_URL = "https://raw.githubusercontent.com/bvcvb/led/master/"   # 应用 .py 所在目录
+APPS_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/apps.json"
+BIN_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/"   # 应用 .py 所在目录
 FETCH_TIMEOUT_MS = 10000
 ROW_Y0 = 80                 # 第一行应用列表的 y
 ROW_STEP = 50               # 每行间距

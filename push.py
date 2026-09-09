@@ -4,7 +4,7 @@
 push.py — 把本地代码无线下发到 M5Stack CoreS3 (UIFlow2)
 
 原理:
-    把本地文件(默认为 key.py) 的内容写入 GitHub 仓库 bvcvb/led 的 key.py (master 分支)。
+    把本地文件(默认为 src/key.py) 的内容写入 GitHub 仓库 bvcvb/led 的 src/key.py (master 分支)。
     设备端 device/loader.py 会通过 requests2.get(该文件的 raw 地址) 拉取并执行。
 
 前置:
@@ -15,13 +15,13 @@ push.py — 把本地代码无线下发到 M5Stack CoreS3 (UIFlow2)
 
 用法:
     export GITHUB_TOKEN="github_pat_..."
-    python3 push.py [local_file]    # 推送到 bvcvb/led 的 master/key.py (默认 key.py)
+    python3 push.py [local_file]    # 推送到 bvcvb/led 的 master/src/key.py (默认 src/key.py)
 
 可选环境变量:
     GH_OWNER   仓库属主 (默认 bvcvb)
     GH_REPO    仓库名   (默认 led)
     GH_BRANCH  分支     (默认 master)
-    GH_PATH    仓库内文件路径 (默认 key.py)
+    GH_PATH    仓库内文件路径 (默认 src/key.py)
 
 返回:
     成功时打印设备端可用的 raw 地址(fetch_url)。
@@ -38,8 +38,8 @@ import urllib.error
 DEFAULT_OWNER = "bvcvb"
 DEFAULT_REPO = "led"
 DEFAULT_BRANCH = "master"
-DEFAULT_PATH = "key.py"
-DEFAULT_FILE = "key.py"
+DEFAULT_PATH = "src/key.py"
+DEFAULT_FILE = "src/key.py"
 
 # GitHub API
 API_CONTENTS = "https://api.github.com/repos/{owner}/{repo}/contents/{path}"

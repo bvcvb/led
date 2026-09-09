@@ -46,29 +46,29 @@ cd led
    ```
    应看到：
    ```
-   [loader] started, polling: https://raw.githubusercontent.com/bvcvb/led/master/key.py
+   [loader] started, polling: https://raw.githubusercontent.com/bvcvb/led/master/src/menu.py
    ```
 
 ---
 
 ## 三、之后日常更新（不再需要 USB，纯无线）
 
-此后 `main.py` = loader 在设备上常驻，它会周期去拉仓库里的 `key.py`。改代码只需：
+此后 `main.py` = loader 在设备上常驻，它会周期去拉仓库里的 `src/menu.py`（应用菜单）。改某个应用代码只需：
 
 ```bash
 # 在你电脑上
 cd led
-改 key.py
-python3 push.py export GITHUB_TOKEN=...    # 推 key.py 到 bvcvb/led/master/key.py
+改 src/key.py
+python3 push.py src/key.py         # 推 src/key.py 到 bvcvb/led/master/src/key.py
 ```
 
-设备下个轮询周期（默认 5s）自动拉到新版运行，全程无 USB。
+设备下个轮询周期（默认 3s）自动拉取菜单/应用，全程无 USB。
 
 > `push.py` 需要 `GITHUB_TOKEN`(仓库 Contents 权限)，且依赖 git 仓库里的 `push.py` 脚本。
 > 快捷示例：
 > ```bash
 > export GITHUB_TOKEN="github_pat_xxx"
-> python3 push.py         # 推本地 key.py 到 bvcvb/led/master/key.py
+> python3 push.py src/key.py       # 推本地 src/key.py 到 bvcvb/led/master/src/key.py
 > ```
 
 ---
@@ -86,5 +86,5 @@ python3 push.py export GITHUB_TOKEN=...    # 推 key.py 到 bvcvb/led/master/key
 
 - [ ] `mpremote connect list` 能看到 CoreS3 串口
 - [ ] `cp device/loader.py :main.py` 成功
-- [ ] `reset` 后日志打印 `[loader] started, polling: https://raw.githubusercontent.com/bvcvb/led/master/key.py`
+- [ ] `reset` 后日志打印 `[loader] started, polling: https://raw.githubusercontent.com/bvcvb/led/master/src/menu.py`
 - [ ] 改 `key.py` 后跑 `python3 push.py`，等一个周期设备打印 `[loader] got new code, (N bytes)`
