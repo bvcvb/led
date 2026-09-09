@@ -17,22 +17,30 @@ import time
 
 import M5
 from M5 import Widgets
+import machine
 
 import requests2
 
 # ---- 配置区 -------------------------------------------------------------
-MENU_VERSION = "v1.2.0"          # menu 自身版本号
+MENU_VERSION = "v1.3.0"          # menu 自身版本号
 APPS_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/apps.json"
 BIN_URL = "https://raw.githubusercontent.com/bvcvb/led/master/src/"   # 应用 .py 所在目录
 FETCH_TIMEOUT_MS = 4000          # 网络超时(短), 避免长时间卡死主循环
 POLL_CHECK_MS = 5000             # 菜单展示期: 周期性拉 apps.json 检查版本(毫秒)
 ROW_Y0 = 80                      # 第一行应用列表的 y
 ROW_STEP = 50                    # 每行间距
+HINT_Y = 200                     # 底部提示行 y
+# 重启按钮区域(右上角)
+RESTART_BTN_X = 250
+RESTART_BTN_Y = 6
+RESTART_BTN_W = 66
+RESTART_BTN_H = 40
 # 颜色
 C_BG = 0x222222
 C_SEL_BG = 0x00FF00              # 选中行背景
 C_SEL_FG = 0x000000              # 选中行文字
 C_NORM_FG = 0xFFFF00             # 普通行文字
+C_RESTART_FG = 0xFF5555          # 重启条目文字(偏红, 醒目)
 # ------------------------------------------------------------------------
 
 apps = []                   # [{name,file,version}, ...]
@@ -108,6 +116,15 @@ def _render_list():
     Widgets.fillScreen(C_BG)
     Widgets.Title("App Menu", 3, 0xFFFFFF, 0x0000FF,
                   Widgets.FONTS.Montserrat18)
+
+    # 右上角重置按钮(固定): 点它重启设备
+    M5.Lcd.fillRect(RESTART_BTN_X, RESTART_BTN_Y, RESTART_BTN_W, RESTART_BTN_H,
+                    0xCC0000)
+    M5.Lcd.drawRect(RESTART_BTN_X, RESTART_BTN_Y, RESTART_BTN_W, RESTART_BTN_H,
+                    0xFFFFFF)
+    Widgets.Label("R", RESTART_BTN_X + 26, RESTART_BTN_Y + 10, 1.0,
+                  0xFFFFFF, 0xCC0000, Widgets.FONTS.Montserrat18)
+
     _rows = []
     fetch_apps()
     rows = apps if apps else []
@@ -121,7 +138,7 @@ def _render_list():
                             0xFFFFFF, C_BG, Widgets.FONTS.DejaVu18)
         _rows.append(lbl)
         y += ROW_STEP
-    Widgets.Label("tap to select | tap again to run", 3, 200, 1.0,
+    Widgets.Label("tap to select | tap again to run | R: restart", 3, HINT_Y, 1.0,
                   0xFFFFFF, 0x0055AA, Widgets.FONTS.DejaVu18)
 
 
@@ -185,7 +202,16 @@ def _handle_touch():
     detail = M5.Touch.getDetail(0)
     if not detail[6]:        # wasClicked -> 仅点击触发(避免拖动误触)
         return
+    x = M5.Touch.getX()
     y = M5.Touch.getY()
+
+    # 右上角 R 按钮: 重启设备
+    if (RESTART_BTN_X <= x <= RESTART_BTN_X + RESTART_BTN_W
+            and RESTART_BTN_Y <= y <= RESTART_BTN_Y + RESTART_BTN_H):
+        print("[menu] restart triggered (x=%d,y=%d)" % (x, y))
+        machine.reset()
+        return
+
     if not apps or y < ROW_Y0:
         return
     idx = (y - ROW_Y0) // ROW_STEP
