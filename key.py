@@ -5,7 +5,7 @@ import machine
 
 
 # 应用版本号 —— 显示在屏幕上, 便于核对设备运行的是哪个版本
-APP_VERSION = "v1.0.6"           # 此次: loader 改为周期性拉取+键常量/轮询修复
+APP_VERSION = "v1.1.0"           # 新增 menu.py 应用选择器; 键盘测试作为可运行应用
 # 触控重启按钮的屏幕区域(横屏 CoreS3 320x240; 放右上角)
 RESTART_BTN_X = 250              # 按钮区域左边界
 RESTART_BTN_Y = 6                # 按钮区域上边界
