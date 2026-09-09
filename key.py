@@ -116,16 +116,3 @@ def loop():
     M5.update()
     kb.tick()
     handle_touch()
-
-
-if __name__ == "__main__":
-    try:
-        setup()
-        while True:
-            loop()
-    except (Exception, KeyboardInterrupt) as e:
-        try:
-            from utility import print_error_msg
-            print_error_msg(e)
-        except ImportError:
-            print("please update to latest firmware")
