@@ -34,6 +34,7 @@ _last_apps = None
 _loaded_ver = {}            # file -> 已加载应用的 version(用于判断是否需重新下载)
 _poll_at = 0                # 下次检查版本的时间点(ticks_ms)
 _redraw = False             # 列表内容变化, 需要重绘
+_cursor = -1                # 当前选中的行号(-1 表示未选中); 用于高亮/二次确认
 
 
 def _poll_check():
@@ -148,16 +149,24 @@ def _render_list():
                       0xFFFFFF, 0x222222, Widgets.FONTS.DejaVu18)
         return
     y = ROW_Y0
-    for it in rows:
+    for i, it in enumerate(rows):
         name = it.get("name", it.get("file", "?"))
         ver = it.get("version")
         label = "%s   v%s" % (name, ver) if ver else name
-        Widgets.Label(label, 3, y, 1.0,
-                      0xFFFF00, 0x222222, Widgets.FONTS.DejaVu18)
+        if i == _cursor:
+            # 选中行: 高亮背景色 + 前缀箭头
+            Widgets.Label("> " + label, 3, y, 1.0,
+                          0x000000, 0x00FF00, Widgets.FONTS.DejaVu18)
+        else:
+            Widgets.Label("  " + label, 3, y, 1.0,
+                          0xFFFF00, 0x222222, Widgets.FONTS.DejaVu18)
         y += ROW_STEP
+    Widgets.Label("tap to select  |  tap again to run", 3, 200, 1.0,
+                  0xFFFFFF, 0x0055AA, Widgets.FONTS.DejaVu18)
 
 
 def _handle_touch():
+    global _cursor, _redraw
     if M5.Touch.getCount() <= 0:
         return
     detail = M5.Touch.getDetail(0)
@@ -168,11 +177,16 @@ def _handle_touch():
         return
     idx = (y - ROW_Y0) // ROW_STEP
     if 0 <= idx < len(apps):
-        file = apps[idx].get("file")
-        if file:
-            # 点选前先拉一次 apps.json, 保证版本对比基于最新清单
-            fetch_apps()
-            run_app(file)
+        if idx == _cursor:
+            # 再次点击已选中的行 => 运行
+            file = apps[idx].get("file")
+            if file:
+                fetch_apps()
+                run_app(file)
+        else:
+            # 首次点击 => 选中该行(高亮)
+            _cursor = idx
+            _redraw = True
 
 
 def loop():
